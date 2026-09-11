@@ -1,0 +1,27 @@
+# Virtual environment
+venv/
+.venv/
+env/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# IDE
+.vscode/
+
+# Environment variables
+.env
+
+# Attendance data
+attendance.csv
+attendance.db
+
+# Face datasets
+data/faces/
+data/known_faces/
+
+# OS
+.DS_Store
+Thumbs.db
