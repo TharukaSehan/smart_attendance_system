@@ -2,21 +2,32 @@ import cv2
 import face_recognition
 import pickle
 import numpy as np
-import csv
+import sqlite3
 import os
 from datetime import datetime
 
-# 1. Load trained encodings
+# 1. Initialize SQLite Database
+DB_NAME = "attendance.db"
+
+def init_db():
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS attendance (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            timestamp TEXT NOT NULL
+        )
+    ''')
+    conn.commit()
+    conn.close()
+
+init_db()
+
+# 2. Load trained encodings
 print("[INFO] Loading face encodings...")
 with open("encodings.pickle", "rb") as f:
     data = pickle.load(f)
-
-# 2. Setup CSV Attendance File
-csv_file = "attendance.csv"
-if not os.path.exists(csv_file):
-    with open(csv_file, "w", newline="") as f:
-        writer = csv.writer(f)
-        writer.writerow(["Name", "Timestamp"])
 
 logged_names = set()
 
@@ -39,7 +50,6 @@ while True:
     encodings = face_recognition.face_encodings(rgb_small_frame, boxes)
 
     for (top, right, bottom, left), encoding in zip(boxes, encodings):
-        # Compare with known encodings
         matches = face_recognition.compare_faces(data["encodings"], encoding)
         name = "Unknown"
 
@@ -49,16 +59,23 @@ while True:
             if matches[best_match_index]:
                 name = data["names"][best_match_index]
 
-        # Log attendance to CSV if not already logged in this session
+        # Log attendance to SQLite DB if not already logged in this session
         if name != "Unknown" and name not in logged_names:
             logged_names.add(name)
             now = datetime.now()
             timestamp = now.strftime("%Y-%m-%d %H:%M:%S")
 
-            with open(csv_file, "a", newline="") as f:
-                writer = csv.writer(f)
-                writer.writerow([name, timestamp])
-            print(f"✅ Marked Attendance for: {name} at {timestamp}")
+            # Insert record into SQLite database
+            conn = sqlite3.connect(DB_NAME)
+            cursor = conn.cursor()
+            cursor.execute(
+                "INSERT INTO attendance (name, timestamp) VALUES (?, ?)",
+                (name, timestamp)
+            )
+            conn.commit()
+            conn.close()
+
+            print(f"✅ Recorded to Database: {name} at {timestamp}")
 
         # Scale coordinates back up to original frame size (4x)
         top *= 4
@@ -72,11 +89,11 @@ while True:
         cv2.rectangle(frame, (left, bottom - 35), (right, bottom), box_color, cv2.FILLED)
         cv2.putText(frame, name, (left + 6, bottom - 8), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
 
-    cv2.imshow("Smart Attendance System", frame)
+    cv2.imshow("Smart Attendance System (SQLite)", frame)
 
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
 
 cap.release()
 cv2.destroyAllWindows()
-print(f"\n✅ Session ended. Attendance saved to '{csv_file}'.")
+print(f"\n✅ Session ended. Database '{DB_NAME}' updated.")
